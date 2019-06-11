@@ -34,4 +34,7 @@ set (PSA_API_TEST False)
 # TF-M isolation level: 1..3
 set (TFM_LVL 1)
 
+if(NOT DEFINED TFM_SEGREGATE)
+	set(TFM_SEGREGATE True)
+endif()
 include ("${CMAKE_CURRENT_LIST_DIR}/CommonConfig.cmake")

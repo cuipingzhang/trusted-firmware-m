@@ -106,7 +106,16 @@ struct boot_swap_state {
     uint8_t copy_done;
     uint8_t image_ok;
 };
+#ifdef TFM_SEGREGATE
 
+#if BOOT_MAX_IMG_SECTORS_S < 32
+#error "Too few sectors, please increase BOOT_MAX_IMG_SECTORS_S to at least 32"
+#endif
+#if BOOT_MAX_IMG_SECTORS_NS < 32
+#error "Too few sectors, please increase BOOT_MAX_IMG_SECTORS_NS to at least 32"
+#endif
+
+#else	/*TFM_SEGREGATE*/
 /*
  * The current flashmap API does not check the amount of space allocated when
  * loading sector data from the flash device, allowing for smaller counts here
@@ -118,8 +127,14 @@ struct boot_swap_state {
 #error "Too few sectors, please increase BOOT_MAX_IMG_SECTORS to at least 32"
 #endif
 
+#endif	/*TFM_SEGREGATE*/
+
 /** Number of image slots in flash; currently limited to two. */
+#ifdef TFM_SEGREGATE
+#define BOOT_NUM_SLOTS             4
+#else	/*TFM_SEGREGATE*/
 #define BOOT_NUM_SLOTS             2
+#endif	/*TFM_SEGREGATE*/
 
 /** Maximum number of image sectors supported by the bootloader. */
 #define BOOT_STATUS_STATE_COUNT    3
@@ -153,15 +168,19 @@ struct boot_loader_state {
         size_t num_sectors;
     } imgs[BOOT_NUM_SLOTS];
 
+#ifdef TFM_SEGREGATE
+		const struct flash_area *scratch_area_s;
+		const struct flash_area *scratch_area_ns;
+#else	/*TFM_SEGREGATE*/
     const struct flash_area *scratch_area;
-
+#endif	/*TFM_SEGREGATE*/
     uint8_t write_sz;
 };
 
 int bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig,
                         size_t slen, uint8_t key_id);
 
-uint32_t boot_slots_trailer_sz(uint8_t min_write_sz);
+
 int boot_status_entries(const struct flash_area *fap);
 uint32_t boot_status_off(const struct flash_area *fap);
 int boot_read_swap_state(const struct flash_area *fap,
@@ -169,12 +188,23 @@ int boot_read_swap_state(const struct flash_area *fap,
 int boot_read_swap_state_by_id(int flash_area_id,
                                struct boot_swap_state *state);
 int boot_write_magic(const struct flash_area *fap);
+
+#ifdef TFM_SEGREGATE
+uint32_t boot_slots_trailer_sz(uint8_t min_write_sz,int part);
+int boot_write_status(struct boot_status *bs,int part);
+int boot_read_swap_size(uint32_t *swap_size,int part);
+#else
+uint32_t boot_slots_trailer_sz(uint8_t min_write_sz);
 int boot_write_status(struct boot_status *bs);
+int boot_read_swap_size(uint32_t *swap_size);
+
+#endif
+
 int boot_schedule_test_swap(void);
 int boot_write_copy_done(const struct flash_area *fap);
 int boot_write_image_ok(const struct flash_area *fap);
 int boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size);
-int boot_read_swap_size(uint32_t *swap_size);
+
 
 /*
  * Accessors for the contents of struct boot_loader_state.
@@ -182,7 +212,12 @@ int boot_read_swap_size(uint32_t *swap_size);
 
 /* These are macros so they can be used as lvalues. */
 #define BOOT_IMG_AREA(state, slot) ((state)->imgs[(slot)].area)
+#ifdef TFM_SEGREGATE
+#define BOOT_SCRATCH_AREA_S(state) ((state)->scratch_area_s)
+#define BOOT_SCRATCH_AREA_NS(state) ((state)->scratch_area_ns)
+#else	/*TFM_SEGREGATE*/
 #define BOOT_SCRATCH_AREA(state) ((state)->scratch_area)
+#endif	/*TFM_SEGREGATE*/
 #define BOOT_WRITE_SZ(state) ((state)->write_sz)
 
 static inline struct image_header*
@@ -197,12 +232,22 @@ boot_img_fa_device_id(struct boot_loader_state *state, size_t slot)
     return state->imgs[slot].area->fa_device_id;
 }
 
+#ifdef TFM_SEGREGATE
+static inline uint8_t
+boot_scratch_fa_device_id(struct boot_loader_state *state,int part)
+{
+    if(part == PART_S)
+    	return state->scratch_area_s->fa_device_id;
+    else
+    	return state->scratch_area_ns->fa_device_id;
+}
+#else	/*TFM_SEGREGATE*/
 static inline uint8_t
 boot_scratch_fa_device_id(struct boot_loader_state *state)
 {
     return state->scratch_area->fa_device_id;
 }
-
+#endif	/*TFM_SEGREGATE*/
 static inline size_t
 boot_img_num_sectors(struct boot_loader_state *state, size_t slot)
 {
@@ -217,11 +262,20 @@ boot_img_slot_off(struct boot_loader_state *state, size_t slot)
 {
     return state->imgs[slot].area->fa_off;
 }
-
+#ifdef TFM_SEGREGATE
+static inline size_t boot_scratch_area_size(struct boot_loader_state *state,int part)
+{
+    if(part == PART_S)
+    	return state->scratch_area_s->fa_size;
+    else
+    	return state->scratch_area_ns->fa_size;
+}
+#else	/*TFM_SEGREGATE*/
 static inline size_t boot_scratch_area_size(struct boot_loader_state *state)
 {
     return state->scratch_area->fa_size;
 }
+#endif	/*TFM_SEGREGATE*/
 
 #ifndef MCUBOOT_USE_FLASH_AREA_GET_SECTORS
 
@@ -287,7 +341,48 @@ boot_img_sector_off(struct boot_loader_state *state, size_t slot,
     return state->imgs[slot].sectors[sector].fs_off -
            state->imgs[slot].sectors[0].fs_off;
 }
+#ifdef TFM_SEGREGATE
+static inline int
+boot_initialize_area(struct boot_loader_state *state, int flash_area)
+{
+    uint32_t num_sectors;
+    struct flash_sector *out_sectors;
+    size_t *out_num_sectors;
+    int rc;
 
+    switch (flash_area) {
+    case FLASH_AREA_IMAGE_0_S:
+        num_sectors = BOOT_MAX_IMG_SECTORS_S;
+        out_sectors = state->imgs[0].sectors;
+        out_num_sectors = &state->imgs[0].num_sectors;
+        break;
+    case FLASH_AREA_IMAGE_0_NS:
+        num_sectors = BOOT_MAX_IMG_SECTORS_NS;
+        out_sectors = state->imgs[1].sectors;
+        out_num_sectors = &state->imgs[1].num_sectors;
+        break;
+    case FLASH_AREA_IMAGE_1_S:
+        num_sectors = BOOT_MAX_IMG_SECTORS_S;
+        out_sectors = state->imgs[2].sectors;
+        out_num_sectors = &state->imgs[2].num_sectors;
+        break;
+    case FLASH_AREA_IMAGE_1_NS:
+        num_sectors = BOOT_MAX_IMG_SECTORS_NS;
+        out_sectors = state->imgs[3].sectors;
+        out_num_sectors = &state->imgs[3].num_sectors;
+        break;
+    default:
+        return -1;
+    }
+
+    rc = flash_area_get_sectors(flash_area, &num_sectors, out_sectors);
+    if (rc != 0) {
+        return rc;
+    }
+    *out_num_sectors = num_sectors;
+    return 0;
+}
+#else		/*TFM_SEGREGATE*/
 static inline int
 boot_initialize_area(struct boot_loader_state *state, int flash_area)
 {
@@ -318,7 +413,7 @@ boot_initialize_area(struct boot_loader_state *state, int flash_area)
     *out_num_sectors = num_sectors;
     return 0;
 }
-
+#endif	/*TFM_SEGREGATE*/
 #endif  /* !defined(MCUBOOT_USE_FLASH_AREA_GET_SECTORS) */
 
 #ifdef __cplusplus

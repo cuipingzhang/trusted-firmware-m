@@ -50,10 +50,20 @@ extern "C" {
  */
 #include <inttypes.h>
 
+#ifdef TFM_SEGREGATE
+#define FLASH_AREA_IMAGE_0_S        1
+#define FLASH_AREA_IMAGE_0_NS       2
+#define FLASH_AREA_IMAGE_1_S        3
+#define FLASH_AREA_IMAGE_1_NS       4
+#define FLASH_AREA_IMAGE_SCRATCH_S  5
+#define FLASH_AREA_IMAGE_SCRATCH_NS 6
+#define PART_S									1
+#define PART_NS									0
+#else		/*TFM_SEGREGATE*/
 #define FLASH_AREA_IMAGE_0       1
 #define FLASH_AREA_IMAGE_1       2
 #define FLASH_AREA_IMAGE_SCRATCH 3
-
+#endif	/*TFM_SEGREGATE*/
 /**
  * @brief Structure describing an area on a flash device.
  *

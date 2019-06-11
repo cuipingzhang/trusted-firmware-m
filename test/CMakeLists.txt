@@ -86,6 +86,9 @@ config_setting_shared_linker_flags(tfm_secure_tests)
 
 embedded_set_target_compile_defines(TARGET tfm_secure_tests LANGUAGE C DEFINES __thumb2__ __ARM_FEATURE_CMSE=3 TFM_LVL=${TFM_LVL} APPEND)
 
+if(TFM_SEGREGATE)
+	target_compile_definitions(tfm_secure_tests PRIVATE TFM_SEGREGATE)
+endif()
 
 #Build the non-secure library
 set(CMAKE_STATIC_LIBRARY_PREFIX_C "lib")
@@ -96,6 +99,10 @@ config_setting_shared_compiler_flags(tfm_non_secure_tests)
 config_setting_shared_linker_flags(tfm_non_secure_tests)
 
 embedded_set_target_compile_defines(TARGET tfm_non_secure_tests LANGUAGE C DEFINES __thumb2__ __ARM_FEATURE_CMSE=3 __DOMAIN_NS=1 TFM_LVL=${TFM_LVL} APPEND)
+if(TFM_SEGREGATE)
+	target_compile_definitions(tfm_non_secure_tests PRIVATE TFM_SEGREGATE)
+endif()
+
 #__DOMAIN_NS=1
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)

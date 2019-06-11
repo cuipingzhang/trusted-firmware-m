@@ -196,7 +196,15 @@
 #define TOKEN_TEST_REQUIRED_NUM_SWC 0
 
 /* Text string */
+
+
+#ifdef TFM_SEGREGATE
+#define TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE_S "SPE"
+#define TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE_NS "NSPE"
+#else
 #define TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE "NSPE_SPE"
+#endif
+
 #define TOKEN_TEST_REQUIRE_SWC1_MEASUREMENT_TYPE false /* Optional field */
 
 /* Disable check of measurement value */

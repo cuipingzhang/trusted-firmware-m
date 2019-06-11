@@ -143,7 +143,12 @@ endif()
 # and eliminates copy-paste.
 function(set_up_app_build)
 	set( _OPTIONS_ARGS)                                                            #Option (on/off) arguments (e.g. IGNORE_CASE)
-	set( _ONE_VALUE_ARGS NS_TARGET S_TARGET FULL_BIN SIGN_BIN VENEER_NAME POSTFIX) #Single option arguments (e.g. PATH "./foo/bar")
+	if(TFM_SEGREGATE)
+		set( _ONE_VALUE_ARGS NS_TARGET S_TARGET SIGN_BIN_S SIGN_BIN_NS VENEER_NAME POSTFIX) #Single option arguments (e.g. PATH "./foo/bar")
+	else()
+		set( _ONE_VALUE_ARGS NS_TARGET S_TARGET FULL_BIN SIGN_BIN VENEER_NAME POSTFIX) #Single option arguments (e.g. PATH "./foo/bar")
+	endif()
+	
 	set( _MULTI_VALUE_ARGS LINK_DEFINES)                                           #List arguments (e.g. LANGUAGES C ASM CXX)
 	cmake_parse_arguments(_MY_PARAMS "${_OPTIONS_ARGS}" "${_ONE_VALUE_ARGS}" "${_MULTI_VALUE_ARGS}" ${ARGN})
 
@@ -154,13 +159,21 @@ function(set_up_app_build)
 	if (NOT DEFINED _MY_PARAMS_S_TARGET)
 		message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'S_TARGET' missing.")
 	endif()
-
-	if (NOT DEFINED _MY_PARAMS_FULL_BIN)
-		message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'FULL_BIN' missing.")
-	endif()
-
-	if (NOT DEFINED _MY_PARAMS_SIGN_BIN)
-		message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'SIGN_BIN' missing.")
+	
+	if(TFM_SEGREGATE)
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN_S)
+			message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'SIGN_BIN_S' missing.")
+		endif()
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN_NS)
+			message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'SIGN_BIN_NS' missing.")
+		endif()
+	else()
+		if (NOT DEFINED _MY_PARAMS_FULL_BIN)
+			message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'FULL_BIN' missing.")
+		endif()
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN)
+			message(FATAL_ERROR "set_up_app_build(): mandatory parameter 'SIGN_BIN' missing.")
+		endif()
 	endif()
 
 	if (NOT DEFINED _MY_PARAMS_VENEER_NAME)
@@ -169,8 +182,15 @@ function(set_up_app_build)
 
 	set(EXE_NAME ${_MY_PARAMS_NS_TARGET}${_MY_PARAMS_POSTFIX})
 	set(S_BIN ${_MY_PARAMS_S_TARGET}${_MY_PARAMS_POSTFIX})
-	set(FULL_NAME ${_MY_PARAMS_FULL_BIN}${_MY_PARAMS_POSTFIX})
-	set(SIGN_NAME ${_MY_PARAMS_SIGN_BIN}${_MY_PARAMS_POSTFIX})
+	
+	if(TFM_SEGREGATE)
+		set(SIGN_NAME_S ${_MY_PARAMS_SIGN_BIN_S}${_MY_PARAMS_POSTFIX})
+		set(SIGN_NAME_NS ${_MY_PARAMS_SIGN_BIN_NS}${_MY_PARAMS_POSTFIX})
+	else()
+		set(FULL_NAME ${_MY_PARAMS_FULL_BIN}${_MY_PARAMS_POSTFIX})
+		set(SIGN_NAME ${_MY_PARAMS_SIGN_BIN}${_MY_PARAMS_POSTFIX})
+	endif()
+	
 	set(VENEER_NAME ${_MY_PARAMS_VENEER_NAME}${_MY_PARAMS_POSTFIX}.o)
 
 	#Create linker target: add object library to executable
@@ -221,11 +241,19 @@ function(set_up_app_build)
 
 	#Generate MCUBoot compatible payload
 	if (BL2)
-		mcuboot_create_boot_payload(S_BIN    ${S_BIN}
+		if(TFM_SEGREGATE)
+			mcuboot_create_boot_payload(S_BIN    ${S_BIN}
+									NS_BIN      ${EXE_NAME}
+									SIGN_BIN_S  ${SIGN_NAME_S}
+									SIGN_BIN_NS ${SIGN_NAME_NS}
+									POSTFIX     ${_MY_PARAMS_POSTFIX})
+		else()
+			mcuboot_create_boot_payload(S_BIN    ${S_BIN}
 									NS_BIN   ${EXE_NAME}
 									FULL_BIN ${FULL_NAME}
 									SIGN_BIN ${SIGN_NAME}
 									POSTFIX  ${_MY_PARAMS_POSTFIX})
+		endif()
 	endif()
 
 	if (NOT DEFINED TFM_PARTITION_TEST_CORE)
@@ -294,8 +322,26 @@ if (NOT TARGET_TFM_S_EXISTED)
 endif()
 
 if (LINK_TO_BOTH_MEMORY_REGION)
-	#Link to primary memory region
-	set_up_app_build(NS_TARGET     ${PROJECT_NAME}
+	if(TFM_SEGREGATE)
+		#Link to primary memory region
+		set_up_app_build(NS_TARGET     ${PROJECT_NAME}
+					 S_TARGET      tfm_s
+					 SIGN_BIN_S    tfm_sign_s
+					 SIGN_BIN_NS   tfm_sign_ns
+					 VENEER_NAME   s_veneers
+					 POSTFIX       "_0")
+
+		#Link to secondary memory region(add extra linker flag)
+		set_up_app_build(NS_TARGET     ${PROJECT_NAME}
+					 LINK_DEFINES  "LINK_TO_SECONDARY_PARTITION"
+					 S_TARGET      tfm_s
+					 SIGN_BIN_S    tfm_sign_s
+					 SIGN_BIN_NS   tfm_sign_ns
+					 VENEER_NAME   s_veneers
+					 POSTFIX       "_1")
+	else()
+		#Link to primary memory region
+		set_up_app_build(NS_TARGET     ${PROJECT_NAME}
 					 S_TARGET      tfm_s
 					 FULL_BIN      tfm_full
 					 SIGN_BIN      tfm_sign
@@ -310,13 +356,24 @@ if (LINK_TO_BOTH_MEMORY_REGION)
 					 SIGN_BIN      tfm_sign
 					 VENEER_NAME   s_veneers
 					 POSTFIX       "_1")
+					 
+	endif()
 else()
-	#Link to primary memory region only
-	set_up_app_build(NS_TARGET     ${PROJECT_NAME}
+	if(TFM_SEGREGATE)
+		#Link to primary memory region only
+		set_up_app_build(NS_TARGET     ${PROJECT_NAME}
+					 S_TARGET      tfm_s
+					 SIGN_BIN_S    tfm_sign_s
+					 SIGN_BIN_NS   tfm_sign_ns
+					 VENEER_NAME   s_veneers)
+	else()
+		#Link to primary memory region only
+		set_up_app_build(NS_TARGET     ${PROJECT_NAME}
 					 S_TARGET      tfm_s
 					 FULL_BIN      tfm_full
 					 SIGN_BIN      tfm_sign
 					 VENEER_NAME   s_veneers)
+	endif()
 endif()
 
 #If the tfm_non_secure_tests target is not available

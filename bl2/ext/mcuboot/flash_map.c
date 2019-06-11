@@ -60,6 +60,65 @@ struct flash_map_entry {
  * The flash area describes essentially the partition table of the
  * flash.  In this case, it starts with FLASH_AREA_IMAGE_0.
  */
+#ifdef TFM_SEGREGATE
+static struct flash_map_entry part_map[] = {
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_0_S,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_0_S_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_0_S_SIZE,
+        },
+    },
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_0_NS,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_0_NS_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_0_NS_SIZE,
+        },
+    },
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_1_S,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_1_S_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_1_S_SIZE,
+        },
+    },
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_1_NS,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_1_NS_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_1_NS_SIZE,
+        },
+    },
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_SCRATCH_S,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_SCRATCH_S_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_SCRATCH_S_SIZE,
+        },
+    },
+    
+    {
+        .magic = FLASH_MAP_ENTRY_MAGIC,
+        .area = {
+            .fa_id = FLASH_AREA_IMAGE_SCRATCH_NS,
+            .fa_device_id = FLASH_DEVICE_ID,
+            .fa_off = FLASH_AREA_IMAGE_SCRATCH_NS_OFFSET,
+            .fa_size = FLASH_AREA_IMAGE_SCRATCH_NS_SIZE,
+        },
+    }
+};
+#else		/*TFM_SEGREGATE*/
 static struct flash_map_entry part_map[] = {
     {
         .magic = FLASH_MAP_ENTRY_MAGIC,
@@ -89,6 +148,7 @@ static struct flash_map_entry part_map[] = {
         },
     }
 };
+#endif		/*TFM_SEGREGATE*/
 
 int flash_device_base(uint8_t fd_id, uintptr_t *ret)
 {
@@ -244,7 +304,59 @@ uint8_t flash_area_align(const struct flash_area *area)
     flash_info = FLASH_DEV_NAME.GetInfo();
     return flash_info->program_unit;
 }
+#ifdef TFM_SEGREGATE
+/*
+ * This depends on the mappings defined in sysflash.h, and assumes
+ * that slot 0, slot 1, and the scratch area area contiguous.
+ */
+int flash_area_id_from_image_slot(int slot)
+{
+    return slot + FLASH_AREA_IMAGE_0_S;
+}
 
+static int validate_idx(int idx, uint32_t *off, uint32_t *len)
+{
+    /*
+     * This simple layout has uniform slots, so just fill in the
+     * right one.
+     */
+
+    switch (idx) {
+    case FLASH_AREA_IMAGE_0_S:
+        *off = FLASH_AREA_IMAGE_0_S_OFFSET;
+        *len = FLASH_AREA_IMAGE_0_S_SIZE;
+        break;
+    case FLASH_AREA_IMAGE_0_NS:
+        *off = FLASH_AREA_IMAGE_0_NS_OFFSET;
+        *len = FLASH_AREA_IMAGE_0_NS_SIZE;
+        break;
+    case FLASH_AREA_IMAGE_1_S:
+        *off = FLASH_AREA_IMAGE_1_S_OFFSET;
+        *len = FLASH_AREA_IMAGE_1_S_SIZE;
+        break;
+    case FLASH_AREA_IMAGE_1_NS:
+        *off = FLASH_AREA_IMAGE_1_NS_OFFSET;
+        *len = FLASH_AREA_IMAGE_1_NS_SIZE;
+        break;
+    case FLASH_AREA_IMAGE_SCRATCH_S:
+        *off = FLASH_AREA_IMAGE_SCRATCH_S_OFFSET;
+        *len = FLASH_AREA_IMAGE_SCRATCH_S_SIZE;
+        break;
+        
+    case FLASH_AREA_IMAGE_SCRATCH_NS:
+        *off = FLASH_AREA_IMAGE_SCRATCH_NS_OFFSET;
+        *len = FLASH_AREA_IMAGE_SCRATCH_NS_SIZE;
+        break;
+    default:
+        BOOT_LOG_ERR("unknown flash area %d", idx);
+        return -1;
+    }
+
+    BOOT_LOG_DBG("area %d: offset=0x%x, length=0x%x, sector size=0x%x",
+                 idx, *off, *len, FLASH_AREA_IMAGE_SECTOR_SIZE);
+    return 0;
+}
+#else /*TFM_SEGREGATE*/
 /*
  * This depends on the mappings defined in sysflash.h, and assumes
  * that slot 0, slot 1, and the scratch area area contiguous.
@@ -283,6 +395,7 @@ static int validate_idx(int idx, uint32_t *off, uint32_t *len)
                  idx, *off, *len, FLASH_AREA_IMAGE_SECTOR_SIZE);
     return 0;
 }
+#endif		/*TFM_SEGREGATE*/
 
 int flash_area_to_sectors(int idx, int *cnt, struct flash_area *ret)
 {

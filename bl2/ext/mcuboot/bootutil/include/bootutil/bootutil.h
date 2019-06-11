@@ -78,10 +78,18 @@ struct image_trailer {
 /* you must have pre-allocated all the entries within this structure */
 int boot_go(struct boot_rsp *rsp);
 
+#ifdef TFM_SEGREGATE
+int boot_swap_type(int part);
+int boot_set_pending(int permanent,int part);
+int boot_set_confirmed(int part);
+#else
 int boot_swap_type(void);
 
 int boot_set_pending(int permanent);
 int boot_set_confirmed(void);
+#endif
+
+
 
 #define SPLIT_GO_OK                 (0)
 #define SPLIT_GO_NON_MATCHING       (-1)

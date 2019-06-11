@@ -154,6 +154,9 @@ elseif (${MCUBOOT_UPGRADE_STRATEGY} STREQUAL "SWAP")
 else()
 	message(FATAL_ERROR "ERROR: MCUBoot supports OVERWRITE_ONLY, SWAP, NO_SWAP and RAM_LOADING upgrade strategies only.")
 endif()
+if(TFM_SEGREGATE)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE TFM_SEGREGATE)
+endif()
 
 #Set install location. Keep original value to avoid overriding command line settings.
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)

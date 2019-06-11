@@ -192,13 +192,22 @@ boot_save_sw_type(uint8_t sw_module)
      */
     uint16_t ias_minor;
     enum shared_memory_err_t res;
+#ifdef TFM_SEGREGATE
+		char *sw_type = NULL;
+		char sw_type_s[] = "SPE";
+		char sw_type_ns[] = "NSPE";
+		if(sw_module == SW_SPE)
+			sw_type = sw_type_s;
+		else
+			sw_type = sw_type_ns;
+#else
     char sw_type[] = "NSPE_SPE";
-
+#endif
     /* Add the type identifier of the SW component to the shared data area */
     ias_minor = SET_IAS_MINOR(sw_module, SW_TYPE);
     res = boot_add_data_to_shared_area(TLV_MAJOR_IAS,
                                        ias_minor,
-                                       sizeof(sw_type) - 1,
+                                       strlen(sw_type),
                                        (const uint8_t *)sw_type);
     if (res) {
         return BOOT_STATUS_ERROR;

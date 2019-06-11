@@ -20,13 +20,21 @@ function(mcuboot_create_boot_payload)
 	if (NOT DEFINED _MY_PARAMS_NS_BIN)
 		message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'NS_BIN' missing.")
 	endif()
-
-	if (NOT DEFINED _MY_PARAMS_FULL_BIN)
-		message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'FULL_BIN' missing.")
-	endif()
-
-	if (NOT DEFINED _MY_PARAMS_SIGN_BIN)
-		message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'SIGN_BIN' missing.")
+	
+	if(TFM_SEGREGATE)
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN_S)
+			message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'SIGN_BIN_S' missing.")
+		endif()
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN_NS)
+			message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'SIGN_BIN_NS' missing.")
+		endif()
+	else()
+		if (NOT DEFINED _MY_PARAMS_FULL_BIN)
+			message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'FULL_BIN' missing.")
+		endif()
+		if (NOT DEFINED _MY_PARAMS_SIGN_BIN)
+			message(FATAL_ERROR "mcuboot_create_boot_payload(): mandatory parameter 'SIGN_BIN' missing.")
+		endif()
 	endif()
 
 	if (DEFINED _MY_PARAMS_POSTFIX)
@@ -61,7 +69,68 @@ function(mcuboot_create_boot_payload)
 		set (ADD_SECURITY_COUNTER "")
 	endif()
 
-	add_custom_command(TARGET ${_MY_PARAMS_NS_BIN}
+	if(TFM_SEGREGATE)
+			add_custom_command(TARGET ${_MY_PARAMS_NS_BIN}
+								POST_BUILD
+								#Create concatenated binary image from the two binary file
+		
+								#Sign concatenated binary image with default public key in mcuboot folder
+								COMMAND ${PYTHON_EXECUTABLE} ${MCUBOOT_DIR}/scripts/imgtool.py
+								ARGS sign
+									 --layout ${FLASH_LAYOUT}
+									 -k ${KEY_FILE}
+									 --align 1
+									 -v ${IMAGE_VERSION}
+									 ${ADD_SECURITY_COUNTER}
+									 -H 0x400
+									 --pad ${SIGN_BIN_SIZE_S}
+									 $<TARGET_FILE_DIR:${_MY_PARAMS_S_BIN}>/${_MY_PARAMS_S_BIN}.bin
+									 ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_S}.bin
+									 
+								#Sign concatenated binary image with default public key in mcuboot folder
+								COMMAND ${PYTHON_EXECUTABLE} ${MCUBOOT_DIR}/scripts/imgtool.py
+								ARGS sign
+									 --layout ${FLASH_LAYOUT}
+									 -k ${KEY_FILE}
+									 --align 1
+									 -v ${IMAGE_VERSION}
+									 ${ADD_SECURITY_COUNTER}
+									 -H 0x400
+									 --pad ${SIGN_BIN_SIZE_NS}
+									 $<TARGET_FILE_DIR:${_MY_PARAMS_NS_BIN}>/${_MY_PARAMS_NS_BIN}.bin
+									 ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_NS}.bin)
+		
+			#Collect executables to common location: build/install/outputs/
+			set(TFM_SIGN_S_NAME tfm_s_signed)
+			set(TFM_SIGN_NS_NAME tfm_ns_signed)
+			
+		
+			if (DEFINED MY_POSTFIX)
+				install(FILES  ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_S}.bin
+						RENAME tfm_sig${MY_POSTFIX}_s.bin
+						DESTINATION outputs/${TARGET_PLATFORM}/)
+			else()
+				install(FILES ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_S}.bin
+						DESTINATION outputs/${TARGET_PLATFORM}/)
+			endif()
+			if (DEFINED MY_POSTFIX)
+				install(FILES  ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_NS}.bin
+						RENAME tfm_sig${MY_POSTFIX}_ns.bin
+						DESTINATION outputs/${TARGET_PLATFORM}/)
+			else()
+				install(FILES ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_NS}.bin
+						DESTINATION outputs/${TARGET_PLATFORM}/)
+			endif()
+		
+			install(FILES  ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_S}.bin
+					RENAME ${TFM_SIGN_S_NAME}${_MY_PARAMS_POSTFIX}.bin
+					DESTINATION outputs/fvp/)
+			install(FILES  ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN_NS}.bin
+					RENAME ${TFM_SIGN_NS_NAME}${_MY_PARAMS_POSTFIX}.bin
+					DESTINATION outputs/fvp/)
+	
+	else()
+		add_custom_command(TARGET ${_MY_PARAMS_NS_BIN}
 						POST_BUILD
 						#Create concatenated binary image from the two binary file
 						COMMAND ${PYTHON_EXECUTABLE} ${MCUBOOT_DIR}/scripts/assemble.py
@@ -106,4 +175,5 @@ function(mcuboot_create_boot_payload)
 	install(FILES  ${CMAKE_BINARY_DIR}/${_MY_PARAMS_SIGN_BIN}.bin
 			RENAME ${TFM_SIGN_NAME}${_MY_PARAMS_POSTFIX}.bin
 			DESTINATION outputs/fvp/)
+	endif()
 endfunction()

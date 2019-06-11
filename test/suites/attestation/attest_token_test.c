@@ -13,7 +13,10 @@
 #include "psa_initial_attestation_api.h"
 #include "attest_token_decode.h"
 #include "attest_token_test_values.h"
-
+#ifdef TFM_SEGREGATE
+#define PART_S									1
+#define PART_NS									0
+#endif
 /**
  * \file attest_token_test.c
  *
@@ -491,8 +494,13 @@ Done:
  *
  * This checks for the "first" SW component. See check_sw_component_2().
  */
+#ifdef TFM_SEGREGATE
+static int_fast16_t check_sw_component_1(
+                    const struct attest_token_sw_component_t *sw_component,int part)
+#else
 static int_fast16_t check_sw_component_1(
                     const struct attest_token_sw_component_t *sw_component)
+#endif
 {
     int_fast16_t return_value;
     /* Use a temp variable to make lines less than 80 columns below. */
@@ -500,7 +508,7 @@ static int_fast16_t check_sw_component_1(
     /* Use a temporary string variable to make the static analyzer
      * happy. It doesn't like comparing a string literal to NULL
      */
-    const char *tmp_string;
+    const char *tmp_string = NULL;
 
     return_value = 0;
 
@@ -515,10 +523,13 @@ static int_fast16_t check_sw_component_1(
     } else {
         /* Claim is present */
         /* Don't have to check if its presence is required */
-        tmp_string = TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE;
+#ifdef TFM_SEGREGATE
+        tmp_string = (part == PART_S ? TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE_S : TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE_NS);
+#else
+				tmp_string = TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE;
+#endif
         if(tmp_string != NULL) {
-            tmp = Q_USEFUL_BUF_FROM_SZ_LITERAL(
-                                    TOKEN_TEST_VALUE_SWC1_MEASUREMENT_TYPE);
+            tmp = UsefulBuf_FromSZ(tmp_string);
             if(q_useful_buf_compare(sw_component->measurement_type, tmp)) {
                 /* Check of its value was requested and failed */
                 return_value = -101;
@@ -898,7 +909,51 @@ static int_fast16_t decode_test_internal(enum decode_test_mode_t mode)
             return_value = -5;
             goto Done;
         }
+#ifdef TFM_SEGREGATE
+				if(num_sw_components >= 2) {
+            /* -- Get the first SW component and check it -- */
+            return_value = attest_token_get_sw_component(&token_decode,
+                                                         0,
+                                                         &sw_component);
+            if(return_value) {
+                goto Done;
+            }
 
+            return_value = check_sw_component_1(&sw_component,1);
+            if(return_value) {
+                goto Done;
+            }
+            
+            return_value = attest_token_get_sw_component(&token_decode,
+                                                         1,
+                                                         &sw_component);
+            if(return_value) {
+                goto Done;
+            }
+
+            return_value = check_sw_component_1(&sw_component,0);
+            if(return_value) {
+                goto Done;
+            }
+
+            if(num_sw_components >= 3) {
+                /* -- Get the second SW component and check it -- */
+                return_value = attest_token_get_sw_component(&token_decode,
+                                                             2,
+                                                             &sw_component);
+                if(return_value) {
+                    goto Done;
+                }
+
+                return_value = check_sw_component_2(&sw_component);
+                if(return_value) {
+                    goto Done;
+                }
+            }
+        }
+
+
+#else
         if(num_sw_components >= 1) {
             /* -- Get the first SW component and check it -- */
             return_value = attest_token_get_sw_component(&token_decode,
@@ -928,6 +983,7 @@ static int_fast16_t decode_test_internal(enum decode_test_mode_t mode)
                 }
             }
         }
+#endif
     }
     return_value = 0;
 
